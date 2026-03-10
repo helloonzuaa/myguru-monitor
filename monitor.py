@@ -9,12 +9,22 @@ COOKIE = os.getenv("COOKIE")
 
 URL = "https://myguru.upsi.edu.my/stats/progress/notification/"
 
+IGNORE_COURSES = [
+    "DMG3033",
+    "DTK3013",
+    "DTS3043",
+    "KPF3012",
+    "UPU3112"
+]
+
 headers = {
     "Cookie": COOKIE,
     "User-Agent": "Mozilla/5.0"
 }
 
+
 def send_telegram(message):
+
     requests.post(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
         data={
@@ -23,6 +33,7 @@ def send_telegram(message):
         }
     )
 
+
 def get_notifications():
 
     r = requests.get(URL, headers=headers)
@@ -30,10 +41,8 @@ def get_notifications():
     if r.status_code != 200:
         raise Exception("Session expired")
 
-    try:
-        return r.json()
-    except:
-        raise Exception("Invalid response")
+    return r.json()
+
 
 def compare(old, new):
 
@@ -44,6 +53,9 @@ def compare(old, new):
 
     for course in new:
 
+        if course in IGNORE_COURSES:
+            continue
+
         if course not in old:
             continue
 
@@ -52,10 +64,33 @@ def compare(old, new):
             if item == "course":
                 continue
 
-            if new[course][item] != old[course][item]:
+            old_val = old[course][item]
+            new_val = new[course][item]
+
+            if new_val > old_val:
+
+                diff = new_val - old_val
+
+                if item == "assignment":
+                    text = "New Assignment Posted"
+
+                elif item == "forum":
+                    text = "New Forum Post"
+
+                elif item == "material":
+                    text = "New Learning Material"
+
+                elif item == "announcement":
+                    text = "New Announcement"
+
+                elif item == "quiz":
+                    text = "New Quiz"
+
+                else:
+                    continue
 
                 changes.append(
-                    f"{course} {item}: {old[course][item]} → {new[course][item]}"
+                    f"📚 {course}\n{text}"
                 )
 
     return changes
@@ -67,7 +102,9 @@ try:
 except:
     last = None
 
+
 send_telegram("✅ MyGuru monitor started")
+
 
 while True:
 
@@ -81,9 +118,9 @@ while True:
 
             if diff:
 
-                send_telegram(
-                    "🚨 MyGuru Update\n\n" + "\n".join(diff)
-                )
+                message = "🚨 MyGuru Update\n\n" + "\n\n".join(diff)
+
+                send_telegram(message)
 
         with open("last.json", "w") as f:
             json.dump(current, f)
