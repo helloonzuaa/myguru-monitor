@@ -13,6 +13,7 @@ IGNORE_COURSES = [
     "DMG3033",
     "DTK3013",
     "DTS3043",
+    "DTN3013"
     "KPF3012",
     "UPU3112"
 ]
