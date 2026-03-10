@@ -2,54 +2,38 @@ import requests
 import json
 import time
 import os
-from playwright.sync_api import sync_playwright
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-USERNAME = os.getenv("MYGURU_USER")
-PASSWORD = os.getenv("MYGURU_PASS")
+COOKIE = os.getenv("COOKIE")
 
 URL = "https://myguru.upsi.edu.my/stats/progress/notification/"
 
-cookies = None
+headers = {
+    "Cookie": COOKIE,
+    "User-Agent": "Mozilla/5.0"
+}
 
 def send_telegram(message):
     requests.post(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        data={"chat_id": CHAT_ID, "text": message}
+        data={
+            "chat_id": CHAT_ID,
+            "text": message
+        }
     )
-
-def login():
-
-    global cookies
-
-    with sync_playwright() as p:
-
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-
-        page.goto("https://myguru.upsi.edu.my")
-
-        page.fill('input[name="username"]', USERNAME)
-        page.fill('input[name="password"]', PASSWORD)
-
-        page.click('button[type="submit"]')
-
-        page.wait_for_timeout(5000)
-
-        cookies = page.context.cookies()
-
-        browser.close()
 
 def get_notifications():
 
-    global cookies
+    r = requests.get(URL, headers=headers)
 
-    jar = {c['name']: c['value'] for c in cookies}
+    if r.status_code != 200:
+        raise Exception("Session expired")
 
-    r = requests.get(URL, cookies=jar)
-
-    return r.json()
+    try:
+        return r.json()
+    except:
+        raise Exception("Invalid response")
 
 def compare(old, new):
 
@@ -76,15 +60,14 @@ def compare(old, new):
 
     return changes
 
-login()
-
-send_telegram("✅ MyGuru monitor started (auto login)")
 
 try:
     with open("last.json") as f:
         last = json.load(f)
 except:
     last = None
+
+send_telegram("✅ MyGuru monitor started")
 
 while True:
 
@@ -102,8 +85,8 @@ while True:
                     "🚨 MyGuru Update\n\n" + "\n".join(diff)
                 )
 
-        with open("last.json","w") as f:
-            json.dump(current,f)
+        with open("last.json", "w") as f:
+            json.dump(current, f)
 
         last = current
 
@@ -111,8 +94,6 @@ while True:
 
     except Exception as e:
 
-        send_telegram("⚠ Relogin...")
-
-        login()
+        send_telegram(f"⚠ MyGuru Error: {e}")
 
     time.sleep(60)
