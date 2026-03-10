@@ -22,6 +22,8 @@ headers = {
     "User-Agent": "Mozilla/5.0"
 }
 
+last_update_id = None
+
 
 def send_telegram(message):
 
@@ -69,8 +71,6 @@ def compare(old, new):
 
             if new_val > old_val:
 
-                diff = new_val - old_val
-
                 if item == "assignment":
                     text = "New Assignment Posted"
 
@@ -89,11 +89,63 @@ def compare(old, new):
                 else:
                     continue
 
-                changes.append(
-                    f"📚 {course}\n{text}"
-                )
+                changes.append(f"📚 {course}\n{text}")
 
     return changes
+
+
+def check_command():
+
+    global last_update_id
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+
+    r = requests.get(url).json()
+
+    for result in r["result"]:
+
+        update_id = result["update_id"]
+
+        if last_update_id and update_id <= last_update_id:
+            continue
+
+        last_update_id = update_id
+
+        try:
+
+            text = result["message"]["text"]
+
+            if text == "/check":
+
+                data = get_notifications()[0]
+
+                message = "📚 MyGuru Current Notifications\n\n"
+
+                for course in data:
+
+                    if course in IGNORE_COURSES:
+                        continue
+
+                    course_data = data[course]
+
+                    message += f"{course}\n"
+
+                    for item in course_data:
+
+                        if item == "course":
+                            continue
+
+                        count = course_data[item]
+
+                        if count > 0:
+                            message += f"{item}: {count}\n"
+
+                    message += "\n"
+
+                send_telegram(message)
+
+        except:
+            pass
 
 
 try:
@@ -126,6 +178,8 @@ while True:
             json.dump(current, f)
 
         last = current
+
+        check_command()
 
         print("Checked...")
 
