@@ -2,28 +2,53 @@ import requests
 import json
 import time
 import os
+from playwright.sync_api import sync_playwright
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-COOKIE = os.getenv("COOKIE")
+USERNAME = os.getenv("MYGURU_USER")
+PASSWORD = os.getenv("MYGURU_PASS")
 
 URL = "https://myguru.upsi.edu.my/stats/progress/notification/"
 
-headers = {
-    "Cookie": COOKIE,
-    "User-Agent": "Mozilla/5.0"
-}
+cookies = None
 
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-    requests.post(url, data=data)
+    requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        data={"chat_id": CHAT_ID, "text": message}
+    )
+
+def login():
+
+    global cookies
+
+    with sync_playwright() as p:
+
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto("https://myguru.upsi.edu.my")
+
+        page.fill('input[name="username"]', USERNAME)
+        page.fill('input[name="password"]', PASSWORD)
+
+        page.click('button[type="submit"]')
+
+        page.wait_for_timeout(5000)
+
+        cookies = page.context.cookies()
+
+        browser.close()
 
 def get_notifications():
-    r = requests.get(URL, headers=headers)
+
+    global cookies
+
+    jar = {c['name']: c['value'] for c in cookies}
+
+    r = requests.get(URL, cookies=jar)
+
     return r.json()
 
 def compare(old, new):
@@ -43,24 +68,23 @@ def compare(old, new):
             if item == "course":
                 continue
 
-            old_val = old[course][item]
-            new_val = new[course][item]
-
-            if old_val != new_val:
+            if new[course][item] != old[course][item]:
 
                 changes.append(
-                    f"{course} {item}: {old_val} → {new_val}"
+                    f"{course} {item}: {old[course][item]} → {new[course][item]}"
                 )
 
     return changes
+
+login()
+
+send_telegram("✅ MyGuru monitor started (auto login)")
 
 try:
     with open("last.json") as f:
         last = json.load(f)
 except:
     last = None
-
-send_telegram("✅ MyGuru monitor started (cloud)")
 
 while True:
 
@@ -74,12 +98,12 @@ while True:
 
             if diff:
 
-                message = "🚨 MyGuru Update\n\n" + "\n".join(diff)
+                send_telegram(
+                    "🚨 MyGuru Update\n\n" + "\n".join(diff)
+                )
 
-                send_telegram(message)
-
-        with open("last.json", "w") as f:
-            json.dump(current, f)
+        with open("last.json","w") as f:
+            json.dump(current,f)
 
         last = current
 
@@ -87,6 +111,8 @@ while True:
 
     except Exception as e:
 
-        send_telegram(f"MyGuru monitor error: {e}")
+        send_telegram("⚠ Relogin...")
+
+        login()
 
     time.sleep(60)
