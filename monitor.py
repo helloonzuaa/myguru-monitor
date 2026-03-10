@@ -1,13 +1,13 @@
 import requests
 import json
 import time
+import os
 
-BOT_TOKEN = "8718487929:AAHr1pJSHPCrqBgCHBQg21F-XIUbZWcpKVY"
-CHAT_ID = "1607862436"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+COOKIE = os.getenv("COOKIE")
 
 URL = "https://myguru.upsi.edu.my/stats/progress/notification/"
-
-COOKIE = "ci_session=bb1c091d7ffa3222f9e4e7a3322dc440; attempt=0; myguru_mydigid_upsi=42d1e8da-f6a4-428c-91fd-ca482d776119; G_ENABLED_IDPS=google; _ga_T4L4DFY928=GS2.1.s1773116305$o70$g1$t1773116963$j60$l0$h0; _ga_6QK4HHC8HB=GS2.1.s1766568963$o13$g0$t1766568963$j60$l0$h0; _ga=GA1.1.1194978508.1740795449"
 
 headers = {
     "Cookie": COOKIE,
@@ -26,24 +26,57 @@ def get_notifications():
     r = requests.get(URL, headers=headers)
     return r.json()
 
+def compare(old, new):
+
+    changes = []
+
+    old = old[0]
+    new = new[0]
+
+    for course in new:
+
+        if course not in old:
+            continue
+
+        for item in new[course]:
+
+            if item == "course":
+                continue
+
+            old_val = old[course][item]
+            new_val = new[course][item]
+
+            if old_val != new_val:
+
+                changes.append(
+                    f"{course} {item}: {old_val} → {new_val}"
+                )
+
+    return changes
+
 try:
     with open("last.json") as f:
         last = json.load(f)
 except:
     last = None
 
-send_telegram("✅ MyGuru monitor started")
+send_telegram("✅ MyGuru monitor started (cloud)")
 
 while True:
 
     try:
+
         current = get_notifications()
 
-        if last and current != last:
+        if last:
 
-            msg = "TEST: MyGuru monitor working ✅"
+            diff = compare(last, current)
 
-            send_telegram(msg)
+            if diff:
+
+                message = "🚨 MyGuru Update\n\n" + "\n".join(diff)
+
+                send_telegram(message)
 
         with open("last.json", "w") as f:
             json.dump(current, f)
@@ -53,6 +86,7 @@ while True:
         print("Checked...")
 
     except Exception as e:
-        print("Error:", e)
 
-    time.sleep(30)
+        send_telegram(f"MyGuru monitor error: {e}")
+
+    time.sleep(60)
